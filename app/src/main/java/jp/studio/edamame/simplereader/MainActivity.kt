@@ -36,12 +36,14 @@ class MainActivity : AppCompatActivity() {
     private val rxIsSurfaceCreated: BehaviorSubject<Boolean> = BehaviorSubject.create()
     private val rxIsReaderSetupped: BehaviorSubject<Boolean> = BehaviorSubject.create()
 
-    private val rxBarcode: PublishSubject<Barcode> = PublishSubject.create()
+    private val rxBarcode: BehaviorSubject<Barcode> = BehaviorSubject.create()
     private var flashMode = false
 
     private val disposable: CompositeDisposable = CompositeDisposable()
 
     private var surfaceListener: ViewTreeObserver.OnGlobalLayoutListener? = null
+
+    private var currentBarcodeValue = ""
 
     @SuppressLint("MissingPermission")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,9 +109,9 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        disposable.add(rxBarcode.subscribe { barcode ->
-            Log.e("test", barcode?.displayValue)
-            Log.e("test", "barcode?.valueFormat = " + barcode?.valueFormat)
+        disposable.add(rxBarcode.observeOn(AndroidSchedulers.mainThread()).subscribe { barcode ->
+            Log.e("test", barcode.displayValue)
+            Log.e("test", "barcode?.valueFormat = " + barcode.valueFormat)
 
             val value = barcode.displayValue
 
@@ -118,10 +120,12 @@ class MainActivity : AppCompatActivity() {
                 val uri = Uri.parse(value)
                 val intent = Intent(Intent.ACTION_VIEW, uri)
                 startActivity(intent)
+
             } else {
                 Toast.makeText(this@MainActivity, value, Toast.LENGTH_SHORT).show()
-                mCameraSource?.start(binding.mainPreview.holder)
             }
+
+            currentBarcodeValue = ""
         })
 
         val rxPermission = RxPermissions(this)
@@ -161,10 +165,11 @@ class MainActivity : AppCompatActivity() {
 
                 val barcode = detections.detectedItems?.valueAt(0)
                 barcode?.let {
-                    rxBarcode.onNext(it)
+                    if (currentBarcodeValue != barcode.displayValue) {
+                        currentBarcodeValue = barcode.displayValue
+                        rxBarcode.onNext(it)
+                    }
                 }
-
-                mCameraSource?.stop()
             }
         })
 
