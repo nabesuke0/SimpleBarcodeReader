@@ -1,4 +1,4 @@
-package jp.studio.edamame.simplebarcodereader
+package jp.studio.edamame.simplereader
 
 import org.junit.Test
 

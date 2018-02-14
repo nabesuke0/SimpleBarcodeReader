@@ -7,7 +7,7 @@
         android:id="@+id/main_layout_base"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        tools:context="jp.studio.edamame.simplebarcodereader.MainActivity"
+        tools:context="jp.studio.edamame.simplereader.MainActivity"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
         <android.support.constraint.ConstraintLayout

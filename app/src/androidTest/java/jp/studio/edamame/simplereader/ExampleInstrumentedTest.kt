@@ -1,4 +1,4 @@
-package jp.studio.edamame.simplebarcodereader
+package jp.studio.edamame.simplereader
 
 import android.support.test.InstrumentationRegistry
 import android.support.test.runner.AndroidJUnit4
