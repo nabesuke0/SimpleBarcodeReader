@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.support.v7.app.AlertDialog
 import android.util.Log
 import android.view.SurfaceHolder
+import android.view.ViewTreeObserver
 import com.google.android.gms.vision.CameraSource
 import com.google.android.gms.vision.Detector
 import com.google.android.gms.vision.barcode.Barcode
@@ -30,6 +31,8 @@ class MainActivity : AppCompatActivity() {
     private var flashMode = false
 
     private val disposable: CompositeDisposable = CompositeDisposable()
+
+    private var surfaceListener: ViewTreeObserver.OnGlobalLayoutListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,6 +67,37 @@ class MainActivity : AppCompatActivity() {
                 binding.mainHeaderLeftButton.setImageResource(R.drawable.light_off)
             }
         }
+
+        surfaceListener = ViewTreeObserver.OnGlobalLayoutListener {
+            binding.mainPreview.holder?.addCallback(object : SurfaceHolder.Callback{
+                override fun surfaceChanged(p0: SurfaceHolder?, p1: Int, p2: Int, p3: Int) {
+
+                }
+
+                //プレビュー破棄 バックグラウンド時にも呼ばれる
+                override fun surfaceDestroyed(holder: SurfaceHolder?) {
+                    Log.d("Camera","stop camera source.")
+                    mCameraSource?.stop()
+                }
+
+                //プレビュー生成 フォアグラウンド時にも呼ばれる
+                @SuppressLint("MissingPermission")
+                override fun surfaceCreated(holder: SurfaceHolder?) {
+                    try {
+                        mCameraSource?.start(binding.mainPreview.holder)
+                    }catch (ioe: IOException){
+                        Log.e("Camera","Could not start camera source.",ioe)
+                    }
+                }
+
+            })
+
+            surfaceListener?.let {
+                binding.mainPreview.viewTreeObserver.removeOnGlobalLayoutListener(it)
+            }
+        }
+
+        binding.mainPreview.viewTreeObserver.addOnGlobalLayoutListener(surfaceListener)
     }
 
     override fun onDestroy() {
@@ -101,29 +135,6 @@ class MainActivity : AppCompatActivity() {
                 .setAutoFocusEnabled(true)
                 .build()
 
-        binding.mainPreview.holder?.addCallback(object : SurfaceHolder.Callback{
-            override fun surfaceChanged(p0: SurfaceHolder?, p1: Int, p2: Int, p3: Int) {
-
-            }
-
-            //プレビュー破棄 バックグラウンド時にも呼ばれる
-            override fun surfaceDestroyed(holder: SurfaceHolder?) {
-                Log.d("Camera","stop camera source.")
-                mCameraSource?.stop()
-            }
-
-            //プレビュー生成 フォアグラウンド時にも呼ばれる
-            @SuppressLint("MissingPermission")
-            override fun surfaceCreated(holder: SurfaceHolder?) {
-                try {
-                    mCameraSource?.start(binding.mainPreview.holder)
-                }catch (ioe: IOException){
-                    Log.e("Camera","Could not start camera source.",ioe)
-                }
-            }
-
-        })
-
         mCameraSource?.start(binding.mainPreview.holder)
     }
 
@@ -160,11 +171,5 @@ class MainActivity : AppCompatActivity() {
             }
         }
         alert.show()
-    }
-
-    //dpからpxに変換する
-    fun dpToPx(dp : Float): Int {
-        val d = this.resources.displayMetrics.density
-        return (dp*d).toInt()
     }
 }
