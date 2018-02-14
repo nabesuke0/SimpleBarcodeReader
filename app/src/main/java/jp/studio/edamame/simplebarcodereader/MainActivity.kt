@@ -1,21 +1,23 @@
 package jp.studio.edamame.simplebarcodereader
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.databinding.DataBindingUtil
 import android.hardware.Camera
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
-import android.os.Handler
+import android.support.v7.app.AlertDialog
 import android.util.Log
 import android.view.SurfaceHolder
-import android.view.ViewTreeObserver
 import com.google.android.gms.vision.CameraSource
 import com.google.android.gms.vision.Detector
 import com.google.android.gms.vision.barcode.Barcode
 import com.google.android.gms.vision.barcode.BarcodeDetector
-import io.reactivex.Observable
-import io.reactivex.functions.BiFunction
+import com.tbruyelle.rxpermissions2.RxPermissions
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.subjects.BehaviorSubject
+import io.reactivex.subjects.PublishSubject
 import jp.studio.edamame.simplebarcodereader.databinding.ActivityMainBinding
 import java.io.IOException
 
@@ -23,14 +25,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding : ActivityMainBinding
 
     private var mCameraSource : CameraSource? = null
-
-    private var readSize: BehaviorSubject<Pair<Int, Int>> = BehaviorSubject.create()
-    private var previewSize: BehaviorSubject<Pair<Int, Int>> = BehaviorSubject.create()
-
-    private var mainLayoutObserver: ViewTreeObserver.OnGlobalLayoutListener? = null
-    private var barcodeImageObserver: ViewTreeObserver.OnGlobalLayoutListener? = null
-
+    private val rxIsPermissionEnable: BehaviorSubject<Boolean> = BehaviorSubject.create()
+    private val rxBarcode: PublishSubject<Barcode> = PublishSubject.create()
     private var flashMode = false
+
+    private val disposable: CompositeDisposable = CompositeDisposable()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,55 +37,68 @@ class MainActivity : AppCompatActivity() {
 
         binding = DataBindingUtil.setContentView(this, R.layout.activity_main)
 
-        mainLayoutObserver = ViewTreeObserver.OnGlobalLayoutListener {
-            previewSize.onNext(Pair(binding.mainLayoutBase.width, binding.mainLayoutBase.height))
-            previewSize.onComplete()
+        disposable.add(rxIsPermissionEnable.filter { it }.observeOn(AndroidSchedulers.mainThread()).subscribe {
+            setupReader()
+        })
 
-            mainLayoutObserver?.let {
-                binding.mainLayoutBase.viewTreeObserver.removeOnGlobalLayoutListener(it)
+        disposable.add(rxBarcode.subscribe { barcode ->
+            barcode.format
+        })
+
+        val rxPermission = RxPermissions(this)
+        disposable.add(rxPermission.request(Manifest.permission.CAMERA)
+                .subscribe { granted ->
+                    if (granted) {
+                        rxIsPermissionEnable.onNext(true)
+                    } else {
+                        showConfirmationDialog()
+                    }
+                })
+
+        binding.mainHeaderLeftButton.setOnClickListener {
+            flashOnButton()
+
+            if (flashMode) {
+                binding.mainHeaderLeftButton.setImageResource(R.drawable.light_on)
+            } else {
+                binding.mainHeaderLeftButton.setImageResource(R.drawable.light_off)
             }
-        }
-        binding.mainLayoutBase.viewTreeObserver.addOnGlobalLayoutListener(mainLayoutObserver)
-
-        barcodeImageObserver = ViewTreeObserver.OnGlobalLayoutListener {
-            readSize.onNext(Pair(binding.mainBarcodeImage.width, binding.mainBarcodeImage.height))
-
-            barcodeImageObserver?.let {
-                binding.mainBarcodeImage.viewTreeObserver.removeOnGlobalLayoutListener(it)
-            }
-        }
-        binding.mainBarcodeImage.viewTreeObserver.addOnGlobalLayoutListener(barcodeImageObserver)
-
-
-        Observable.combineLatest<Pair<Int, Int>, Pair<Int, Int>, Array<Pair<Int, Int>>>(
-                readSize, previewSize, BiFunction {a, b -> arrayOf(a, b)}
-        ).subscribe { array ->
-            this.setupReader(array[0], array[1])
         }
     }
 
-    private fun setupReader(readSize: Pair<Int, Int>, previewSize: Pair<Int, Int>) {
+    override fun onDestroy() {
+        super.onDestroy()
+
+        this.disposable.dispose()
+        mCameraSource?.release()
+        mCameraSource = null
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun setupReader() {
         val barcodeDetector = BarcodeDetector.Builder(this).build()
 
-        val boxDetector = BoxDetector(
-                barcodeDetector, readSize.first, readSize.second)
-
-        boxDetector.setProcessor(object: Detector.Processor<Barcode> {
+        barcodeDetector.setProcessor(object: Detector.Processor<Barcode> {
             override fun release() {
 
             }
 
             //読み取り成功時
             override fun receiveDetections(detections: Detector.Detections<Barcode>?) {
+                detections?.let { it } ?: return
 
+                if (detections.detectedItems.size() <= 0) { return }
+
+                val barcode = detections.detectedItems?.valueAt(0)
+                Log.e("test", barcode?.displayValue)
+                Log.e("test", "barcode?.valueFormat = " + barcode?.valueFormat)
+
+//                mCameraSource?.stop()
             }
         })
 
-        val cameraSource = CameraSource.Builder(this, boxDetector)
-                .setRequestedPreviewSize(previewSize.first, previewSize.second)
+        mCameraSource = CameraSource.Builder(this, barcodeDetector)
                 .setAutoFocusEnabled(true)
-
-        mCameraSource = cameraSource
                 .build()
 
         binding.mainPreview.holder?.addCallback(object : SurfaceHolder.Callback{
@@ -105,24 +117,14 @@ class MainActivity : AppCompatActivity() {
             override fun surfaceCreated(holder: SurfaceHolder?) {
                 try {
                     mCameraSource?.start(binding.mainPreview.holder)
-
-//                    if (!isDialog){
-//                        Log.d("Camera","start camera source.")
-//                        mCameraSource?.start(surfaceView?.holder)
-//                    }else{
-//                        mCameraSource?.start(surfaceView?.holder)
-//                        val cameraStop = Runnable {
-//                            mCameraSource?.stop()
-//                        }
-//                        val handler = Handler()
-//                        handler.postDelayed(cameraStop,1000)
-//                    }
                 }catch (ioe: IOException){
                     Log.e("Camera","Could not start camera source.",ioe)
                 }
             }
 
         })
+
+        mCameraSource?.start(binding.mainPreview.holder)
     }
 
     private fun flashOnButton() {
@@ -147,5 +149,22 @@ class MainActivity : AppCompatActivity() {
                 e.printStackTrace()
             }
         }
+    }
+
+    private fun showConfirmationDialog() {
+        val alert = AlertDialog.Builder(this).create().apply {
+            this.setTitle("確認して下さい")
+            this.setMessage("カメラへのアクセスを許可していただかないとアプリを使えません。")
+            this.setButton(android.support.v7.app.AlertDialog.BUTTON_POSITIVE, getString(android.R.string.ok)) { _, _ ->
+                this@MainActivity.finish()
+            }
+        }
+        alert.show()
+    }
+
+    //dpからpxに変換する
+    fun dpToPx(dp : Float): Int {
+        val d = this.resources.displayMetrics.density
+        return (dp*d).toInt()
     }
 }
