@@ -206,7 +206,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showConfirmationDialog() {
         val alert = AlertDialog.Builder(this).create().apply {
-            this.setTitle("確認して下さい")
+            this.setTitle(getString(jp.studio.edamame.simplereader.R.string.confirmation_message))
             this.setMessage("カメラへのアクセスを許可していただかないとアプリを使えません。")
             this.setButton(android.support.v7.app.AlertDialog.BUTTON_POSITIVE, "終了") { _, _ ->
                 this@MainActivity.finish()

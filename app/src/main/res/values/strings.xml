@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">S Reader</string>
     <string name="reader">Simple Reader</string>
+    <string name="confirmation_message">確認して下さい</string>
 </resources>
